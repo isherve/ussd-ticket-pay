@@ -1,6 +1,7 @@
 {
   "name": "ussd-ticket-pay",
   "private": true,
+  "type": "module",
   "version": "1.0.0",
   "description": "USSD ticket purchase demo with mobile-money sandbox payments",
   "engines": {
