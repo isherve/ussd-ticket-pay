@@ -17,7 +17,9 @@ The dashboard shot is a live local session. One payment is still waiting for app
 
 No handset, no wallet, and no credit card. You can also dial the keypad yourself. The phone posts the same form body Africa's Talking sends.
 
-The Vercel deployment uses the same mock payments. Its dashboard header is `recruit-demo-admin`. A cold start creates a fresh SQLite file and seeds the four events.
+Live site: https://ussd-ticket-pay.vercel.app
+
+The Vercel deployment uses the same mock payments. Its dashboard header is `recruit-demo-admin`. A fresh instance starts from the four sample events.
 
 ## Where to read
 

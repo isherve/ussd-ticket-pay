@@ -46,7 +46,7 @@ export function createApp(): express.Express {
           callback(null, true);
           return;
         }
-        if (process.env.VERCEL === "1" && /^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(origin)) {
+        if (/^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(origin)) {
           callback(null, true);
           return;
         }
