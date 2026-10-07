@@ -1,0 +1,15 @@
+---
+description: Coding standards for the USSD Ticket Pay demo
+alwaysApply: true
+---
+
+# USSD Ticket Pay
+
+- TypeScript strict mode. Never use `any`. Validate external input with Zod.
+- Layout: `apps/api` (Express), `apps/web` (React + Vite), `docs`.
+- SQLite through Prisma. Keep the schema Postgres-portable: strings for status and JSON, no SQLite-only types.
+- USSD is a screen-per-module state machine. Run every screen through `assertUssdLength` (182 characters).
+- Payments implement `PaymentProvider`: `initiatePayment`, `getStatus`, `handleWebhook`. Mock is the default. Sandbox mode is selected only with env vars.
+- Do not log secrets or raw phone numbers. Mask phones as `+25078***1234`.
+- Issue a ticket once, inside a DB transaction keyed by a unique payment reference. Webhooks must be safe to receive twice.
+- The app must boot and pass tests with zero third-party credentials.

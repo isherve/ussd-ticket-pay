@@ -1,0 +1,14 @@
+process.env.NODE_ENV = "test";
+process.env.DATABASE_URL = "file:./prisma/test.db";
+process.env.LOG_LEVEL = "silent";
+process.env.WEBHOOK_SECRET = "test-webhook-secret";
+process.env.ADMIN_SECRET = "test-admin-secret";
+process.env.ENABLE_CRON = "false";
+process.env.MTN_MODE = "mock";
+process.env.AIRTEL_MODE = "mock";
+process.env.PAYPAL_MODE = "mock";
+process.env.SMS_MODE = "console";
+process.env.MOCK_PAYMENT_RESULT = "pending";
+process.env.MOCK_PAYMENT_DELAY_MS = "0";
+process.env.PUBLIC_BASE_URL = "http://localhost:3000";
+process.env.WEB_APP_URL = "http://localhost:5173";

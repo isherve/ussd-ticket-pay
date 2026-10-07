@@ -1,0 +1,45 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: file:/data/ussd.db
+      LOG_LEVEL: info
+      CORS_ORIGIN: http://localhost:8080
+      PUBLIC_BASE_URL: http://localhost:3000
+      WEB_APP_URL: http://localhost:8080
+      WEBHOOK_SECRET: docker-demo-webhook-secret
+      ADMIN_SECRET: docker-demo-admin
+      MTN_MODE: mock
+      AIRTEL_MODE: mock
+      PAYPAL_MODE: mock
+      SMS_MODE: console
+      MOCK_PAYMENT_RESULT: pending
+      ENABLE_CRON: "true"
+    volumes:
+      - ussd-data:/data
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 8
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_ADMIN_SECRET: docker-demo-admin
+    ports:
+      - "8080:80"
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  ussd-data:

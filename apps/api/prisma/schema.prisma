@@ -1,0 +1,141 @@
+// Postgres-portable schema. Status and JSON payloads are strings so the same
+// models work on SQLite (demo) and PostgreSQL (production) without native enums.
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x", "rhel-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orders    Order[]
+  tickets   Ticket[]
+}
+
+model Event {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  shortName   String
+  venue       String
+  startsAt    DateTime
+  priceRwf    Int
+  capacity    Int
+  ticketsSold Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  orders      Order[]
+  tickets     Ticket[]
+}
+
+model Order {
+  id           String   @id @default(cuid())
+  userId       String
+  eventId      String
+  quantity     Int
+  unitPriceRwf Int
+  totalRwf     Int
+  currency     String   @default("RWF")
+  status       String
+  reference    String   @unique
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  user         User     @relation(fields: [userId], references: [id])
+  event        Event    @relation(fields: [eventId], references: [id])
+  payment      Payment?
+  ticket       Ticket?
+
+  @@index([userId, createdAt])
+  @@index([status])
+}
+
+model Payment {
+  id          String   @id @default(cuid())
+  orderId     String   @unique
+  provider    String
+  externalRef String   @unique
+  amount      String
+  currency    String
+  status      String
+  approvalUrl String?
+  rawResponse String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  order       Order    @relation(fields: [orderId], references: [id])
+
+  @@index([status, createdAt])
+}
+
+model Ticket {
+  id        String   @id @default(cuid())
+  orderId   String   @unique
+  userId    String
+  eventId   String
+  code      String   @unique
+  qrPayload String
+  status    String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  event     Event    @relation(fields: [eventId], references: [id])
+  order     Order    @relation(fields: [orderId], references: [id])
+
+  @@index([userId, createdAt])
+}
+
+model UssdSession {
+  id        String   @id @default(cuid())
+  sessionId String   @unique
+  phone     String
+  state     String
+  data      String
+  lastText  String   @default("")
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([expiresAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  action    String
+  actor     String?
+  entity    String?
+  entityId  String?
+  meta      String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model SmsLog {
+  id        String   @id @default(cuid())
+  toPhone   String
+  body      String
+  provider  String
+  status    String
+  ticketId  String?
+  orderId   String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([ticketId])
+}
+
+model WebhookReceipt {
+  id         String   @id @default(cuid())
+  provider   String
+  deliveryId String
+  createdAt  DateTime @default(now())
+
+  @@unique([provider, deliveryId])
+}

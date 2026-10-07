@@ -1,0 +1,29 @@
+{
+  "name": "ussd-ticket-pay",
+  "private": true,
+  "version": "1.0.0",
+  "description": "USSD ticket purchase demo with mobile-money sandbox payments",
+  "engines": {
+    "node": ">=20"
+  },
+  "workspaces": [
+    "apps/api",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"npm run dev -w @ussd/api\" \"npm run dev -w @ussd/web\"",
+    "test": "npm run test -w @ussd/api",
+    "lint": "npm run lint -w @ussd/api",
+    "build": "npm run build -w @ussd/api && npm run build -w @ussd/web",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "db:migrate": "npm run db:migrate -w @ussd/api",
+    "db:push": "npm run db:push -w @ussd/api",
+    "db:seed": "npm run db:seed -w @ussd/api",
+    "momo:setup": "npm run momo:setup -w @ussd/api"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2",
+    "prettier": "^3.5.3"
+  }
+}
