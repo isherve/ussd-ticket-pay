@@ -1,5 +1,6 @@
 import type { Event } from "@prisma/client";
 import { prisma } from "./db.js";
+import { sendToWallet, splitWallet, topUp } from "./wallet/service.js";
 
 export const sampleEvents: Array<{
   slug: string;
@@ -68,4 +69,22 @@ export async function ensureSeed(): Promise<Event[]> {
     );
   }
   return saved;
+}
+
+const demoPhone = "+250788123456";
+
+export async function ensureDemoWallet(): Promise<void> {
+  await topUp({ phone: demoPhone, amountRwf: 10_000, idempotencyKey: "seed-deposit-1" });
+  await sendToWallet({
+    fromPhone: demoPhone,
+    toPhone: "+250788999111",
+    amountRwf: 2500,
+    idempotencyKey: "seed-send-1",
+  });
+  await splitWallet({
+    fromPhone: demoPhone,
+    amountRwf: 5000,
+    phones: ["+250728999222", "+250728999333"],
+    idempotencyKey: "seed-split-1",
+  });
 }

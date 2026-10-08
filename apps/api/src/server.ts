@@ -5,10 +5,11 @@ import { prisma } from "./db.js";
 import { startReconcileJob, stopReconcileJob } from "./jobs/scheduler.js";
 import { logger } from "./logger.js";
 import { prepareDatabase } from "./prepare-db.js";
-import { ensureSeed } from "./seed.js";
+import { ensureDemoWallet, ensureSeed } from "./seed.js";
 
 await prepareDatabase();
 await ensureSeed();
+await ensureDemoWallet();
 
 const app = createApp();
 export default app;

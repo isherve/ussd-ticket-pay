@@ -2,6 +2,7 @@ import request from "supertest";
 import { beforeEach, describe, expect, it } from "vitest";
 import { createApp } from "../src/app.js";
 import { prisma } from "../src/db.js";
+import { ensureDemoWallet } from "../src/seed.js";
 import { resetDb } from "./reset-db.js";
 
 const app = createApp();
@@ -169,6 +170,22 @@ describe("internal wallet", () => {
     expect(sent.text).toContain("Sent 2500 RWF");
     expect(await balance(from)).toBe(5000);
     expect(await balance(toA)).toBe(2500);
+  });
+
+  it("opens the demo number with recent transfers and does not post them twice", async () => {
+    await ensureDemoWallet();
+    expect(await balance(from)).toBe(2500);
+    const view = await request(app).get("/api/wallet").query({ phone: from });
+    expect(view.body.transfers).toHaveLength(3);
+    expect(view.body.transfers.map((entry: { kind: string }) => entry.kind).sort()).toEqual([
+      "SEND",
+      "SPLIT",
+      "TOPUP",
+    ]);
+
+    await ensureDemoWallet();
+    expect(await balance(from)).toBe(2500);
+    expect(await prisma.transfer.count()).toBe(3);
   });
 
   it("credits the amount typed on deposit", async () => {

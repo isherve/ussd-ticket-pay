@@ -139,7 +139,7 @@ export function WalletPage() {
         ) : null}
         {error ? <p className="mt-4 text-sm text-[var(--color-clay)]">{error}</p> : null}
 
-        <h3 className="mt-8 text-sm font-medium">Recent activity</h3>
+        <h3 className="mt-8 text-sm font-medium">Recent transfers</h3>
         <ul className="mt-2 space-y-2">
           {wallet && wallet.transfers.length === 0 ? (
             <li className="text-sm text-[#5c675f]">No transfers yet.</li>
