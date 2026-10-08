@@ -10,6 +10,7 @@ import { requestId } from "./http/middleware/requestId.js";
 import { adminRouter } from "./http/routes/admin.js";
 import { healthRouter } from "./http/routes/health.js";
 import { ussdRouter } from "./http/routes/ussd.js";
+import { walletRouter } from "./http/routes/wallet.js";
 import { webhookRouter } from "./http/routes/webhooks.js";
 import { logger } from "./logger.js";
 import { openApiSpec } from "./openapi.js";
@@ -81,6 +82,7 @@ export function createApp(): express.Express {
   app.use("/docs", swaggerUi.serve, swaggerUi.setup(openApiSpec));
   app.use(healthRouter);
   app.use(ussdRouter);
+  app.use(walletRouter);
   app.use(webhookRouter);
   app.use(adminRouter);
 

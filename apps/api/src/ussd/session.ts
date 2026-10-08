@@ -4,6 +4,7 @@ import { maskPhone, normalizeRwandaPhone } from "../lib/phone.js";
 import { logger } from "../logger.js";
 import { config } from "../config.js";
 import { listPurchases, startCheckout } from "../payments/service.js";
+import { sendToWallet, splitWallet, topUp, walletBalance } from "../wallet/service.js";
 import { isScreenId, parseSessionData, runUssd } from "./engine.js";
 import type { UssdDeps } from "./types.js";
 
@@ -22,11 +23,19 @@ export function createUssdDeps(): UssdDeps {
       return {
         page: safePage,
         pages,
-        items: rows.map((row) => ({ id: row.id, shortName: row.shortName, priceRwf: row.priceRwf })),
+        items: rows.map((row) => ({
+          id: row.id,
+          shortName: row.shortName,
+          priceRwf: row.priceRwf,
+        })),
       };
     },
     listPurchases,
     startPayment: (input) => startCheckout(input),
+    walletBalance,
+    walletTopUp: topUp,
+    walletSend: sendToWallet,
+    walletSplit: splitWallet,
   };
 }
 
@@ -75,6 +84,7 @@ export async function handleUssdSession(input: {
       network: phone.network,
       deps: input.deps ?? createUssdDeps(),
       pageSize: config.ussdPageSize,
+      requestKey: `${input.sessionId}:${input.text}`,
     },
   });
 

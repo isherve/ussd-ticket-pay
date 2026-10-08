@@ -41,6 +41,17 @@ async function readError(response: Response): Promise<string> {
     if (body && typeof body === "object" && "message" in body && typeof body.message === "string") {
       return body.message;
     }
+    if (body && typeof body === "object" && "issues" in body && Array.isArray(body.issues)) {
+      const first: unknown = body.issues[0];
+      if (
+        first &&
+        typeof first === "object" &&
+        "message" in first &&
+        typeof first.message === "string"
+      ) {
+        return first.message;
+      }
+    }
   } catch {
     return response.statusText;
   }
@@ -125,6 +136,85 @@ export async function admitTicket(code: string): Promise<TicketPass> {
   });
   if (!response.ok) throw new Error(await readError(response));
   return (await response.json()) as TicketPass;
+}
+
+export type WalletActivity = {
+  reference: string;
+  kind: "TOPUP" | "SEND" | "SPLIT" | "TICKET";
+  direction: "in" | "out";
+  amountRwf: number;
+  counterparty: string;
+  createdAt: string;
+};
+
+export type WalletView = {
+  phone: string;
+  currency: "RWF";
+  balanceRwf: number;
+  transfers: WalletActivity[];
+};
+
+export type WalletMove = {
+  reference: string;
+  kind: "TOPUP" | "SEND" | "SPLIT" | "TICKET";
+  amountRwf: number;
+  shareRwf: number;
+  remainderRwf: number;
+  balanceRwf: number;
+  duplicate: boolean;
+  recipients: { phone: string; amountRwf: number }[];
+};
+
+function walletKey(): string {
+  return crypto.randomUUID();
+}
+
+export async function fetchWallet(phone: string): Promise<WalletView> {
+  const response = await fetch(`/api/wallet?phone=${encodeURIComponent(phone)}`);
+  if (!response.ok) throw new Error(await readError(response));
+  return (await response.json()) as WalletView;
+}
+
+export async function topUpWallet(phone: string, amountRwf?: number): Promise<WalletMove> {
+  const response = await fetch("/api/wallet/topup", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      phone,
+      idempotencyKey: walletKey(),
+      ...(amountRwf === undefined ? {} : { amountRwf }),
+    }),
+  });
+  if (!response.ok) throw new Error(await readError(response));
+  return (await response.json()) as WalletMove;
+}
+
+export async function sendWallet(input: {
+  fromPhone: string;
+  toPhone: string;
+  amountRwf: number;
+}): Promise<WalletMove> {
+  const response = await fetch("/api/wallet/send", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...input, idempotencyKey: walletKey() }),
+  });
+  if (!response.ok) throw new Error(await readError(response));
+  return (await response.json()) as WalletMove;
+}
+
+export async function splitWallet(input: {
+  fromPhone: string;
+  amountRwf: number;
+  phones: string[];
+}): Promise<WalletMove> {
+  const response = await fetch("/api/wallet/split", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ...input, idempotencyKey: walletKey() }),
+  });
+  if (!response.ok) throw new Error(await readError(response));
+  return (await response.json()) as WalletMove;
 }
 
 export async function simulatePayment(

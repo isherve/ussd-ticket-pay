@@ -1,10 +1,12 @@
 import { AppError } from "../../lib/errors.js";
 import { assertUssdLength, clip } from "../../lib/ussdLimit.js";
+import { ussdTransferKey } from "../../wallet/service.js";
 import type { PaymentChoice, ScreenContext, ScreenStep, UssdScreen } from "../types.js";
 
 function providerLabel(provider: PaymentChoice): string {
   if (provider === "mtn") return "MTN MoMo";
   if (provider === "airtel") return "Airtel Money";
+  if (provider === "wallet") return "Wallet";
   return "PayPal";
 }
 
@@ -20,7 +22,7 @@ export const confirmScreen: UssdScreen = {
       `Total ${unit * qty} RWF`,
       `Via ${providerLabel(provider)}`,
     ];
-    if (provider !== "paypal" && provider !== ctx.network) {
+    if ((provider === "mtn" || provider === "airtel") && provider !== ctx.network) {
       lines.push(ctx.network === "mtn" ? "Line is MTN" : "Line is Airtel");
     }
     lines.push("1. Confirm", "2. Cancel");
@@ -40,7 +42,15 @@ export const confirmScreen: UssdScreen = {
         eventId,
         quantity,
         provider,
+        idempotencyKey: ussdTransferKey("ticket", ctx.requestKey),
       });
+      if (result.ticketCode) {
+        const lead = result.duplicate ? "Already paid." : "Paid from wallet.";
+        return {
+          type: "end",
+          message: `${lead}\nCode ${result.ticketCode}\nRef: ${result.reference}`,
+        };
+      }
       return {
         type: "end",
         message: `Check your phone to approve the payment. Ref: ${result.reference}`,

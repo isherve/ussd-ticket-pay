@@ -5,18 +5,24 @@ const choices: Record<string, PaymentChoice> = {
   "1": "mtn",
   "2": "airtel",
   "3": "paypal",
+  "4": "wallet",
 };
 
 export const paymentScreen: UssdScreen = {
   id: "payment",
-  show(ctx: ScreenContext): Promise<string> {
+  async show(ctx: ScreenContext): Promise<string> {
     const suggested = ctx.network === "mtn" ? "MTN" : "Airtel";
-    return Promise.resolve(
-      assertUssdLength(
-        [`Suggested: ${suggested}`, "1. MTN MoMo", "2. Airtel Money", "3. PayPal", "0. Back"].join(
-          "\n",
-        ),
-      ),
+    const balance = await ctx.deps.walletBalance(ctx.phone);
+    return assertUssdLength(
+      [
+        `Suggested: ${suggested}`,
+        `Wallet ${balance} RWF`,
+        "1. MTN MoMo",
+        "2. Airtel Money",
+        "3. PayPal",
+        "4. Wallet",
+        "0. Back",
+      ].join("\n"),
     );
   },
   onInput(input: string, ctx: ScreenContext): Promise<ScreenStep> {

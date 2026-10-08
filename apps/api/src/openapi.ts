@@ -59,6 +59,31 @@ export const openApiSpec = {
         responses: { "200": { description: "Accepted" } },
       },
     },
+    "/api/wallet": {
+      get: {
+        summary: "Internal RWF wallet balance and recent transfers for one phone",
+        parameters: [{ name: "phone", in: "query", required: true, schema: { type: "string" } }],
+        responses: { "200": { description: "Masked phone, balance, and activity" } },
+      },
+    },
+    "/api/wallet/topup": {
+      post: {
+        summary: "Credit a typed RWF amount. Omitted amount is 10000. Same idempotency key posts once.",
+        responses: { "200": { description: "Posted or duplicate" } },
+      },
+    },
+    "/api/wallet/send": {
+      post: {
+        summary: "Move RWF from one wallet to another inside the ledger",
+        responses: { "200": { description: "Posted or duplicate" } },
+      },
+    },
+    "/api/wallet/split": {
+      post: {
+        summary: "Split an amount equally across 2 to 5 wallets. Remainder stays with the sender.",
+        responses: { "200": { description: "Posted or duplicate" } },
+      },
+    },
     "/api/orders": {
       get: {
         summary: "Recent orders with masked phone numbers",

@@ -1,7 +1,13 @@
 import { assertUssdLength, USSD_MAX_CHARS } from "../lib/ussdLimit.js";
 import { screens } from "./screens/index.js";
 import { newSegments } from "./text.js";
-import { emptySessionData, type ScreenContext, type ScreenId, type SessionData } from "./types.js";
+import {
+  emptySessionData,
+  screenIds,
+  type ScreenContext,
+  type ScreenId,
+  type SessionData,
+} from "./types.js";
 
 export type EngineSession = {
   state: ScreenId;
@@ -90,6 +96,10 @@ export function parseSessionData(raw: string): SessionData {
     if (!parsed || typeof parsed !== "object") return emptySessionData();
     const record = parsed as Record<string, unknown>;
     const page = record.eventPage;
+    const amount = record.walletAmount;
+    const recipients = Array.isArray(record.recipients)
+      ? record.recipients.filter((item): item is string => typeof item === "string").slice(0, 5)
+      : undefined;
     return {
       eventPage: typeof page === "number" && Number.isInteger(page) && page >= 0 ? page : 0,
       eventId: typeof record.eventId === "string" ? record.eventId : undefined,
@@ -97,9 +107,15 @@ export function parseSessionData(raw: string): SessionData {
       unitPriceRwf: typeof record.unitPriceRwf === "number" ? record.unitPriceRwf : undefined,
       quantity: typeof record.quantity === "number" ? record.quantity : undefined,
       provider:
-        record.provider === "mtn" || record.provider === "airtel" || record.provider === "paypal"
+        record.provider === "mtn" ||
+        record.provider === "airtel" ||
+        record.provider === "paypal" ||
+        record.provider === "wallet"
           ? record.provider
           : undefined,
+      walletAmount:
+        typeof amount === "number" && Number.isInteger(amount) && amount > 0 ? amount : undefined,
+      recipients,
     };
   } catch {
     return emptySessionData();
@@ -107,13 +123,5 @@ export function parseSessionData(raw: string): SessionData {
 }
 
 export function isScreenId(value: string): value is ScreenId {
-  return (
-    value === "welcome" ||
-    value === "events" ||
-    value === "quantity" ||
-    value === "payment" ||
-    value === "confirm" ||
-    value === "tickets" ||
-    value === "help"
-  );
+  return (screenIds as readonly string[]).includes(value);
 }

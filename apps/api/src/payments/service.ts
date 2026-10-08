@@ -6,8 +6,9 @@ import { maskPhone, normalizeRwandaPhone } from "../lib/phone.js";
 import { logger } from "../logger.js";
 import { approvalSms, ticketSms } from "../sms/types.js";
 import { getSmsService } from "../sms/index.js";
-import type { PaymentChoice, PurchaseLine, StartPaymentInput } from "../ussd/types.js";
+import type { PurchaseLine, StartPaymentInput } from "../ussd/types.js";
 import { ticketPageUrl } from "../tickets/pass.js";
+import { debitBalance, recordTicketSpend } from "../wallet/service.js";
 import { makeReference, makeTicketCode, safeJson } from "./ids.js";
 import { providerCharge } from "./money.js";
 import { callbackUrl, getProvider, providerMode } from "./registry.js";
@@ -27,6 +28,8 @@ export async function startCheckout(
   if (!Number.isInteger(input.quantity) || input.quantity < 1 || input.quantity > 5) {
     throw new AppError("Quantity must be 1 to 5.", 400, "invalid_quantity");
   }
+
+  if (input.provider === "wallet") return payFromWallet(input, phone.e164);
 
   const reference = makeReference();
   const externalRef = randomUUID();
@@ -125,6 +128,146 @@ export async function startCheckout(
     if (error instanceof AppError) throw error;
     throw new AppError("Payment could not start.", 502, "payment_failed");
   }
+}
+
+async function payFromWallet(
+  input: StartPaymentInput,
+  phoneE164: string,
+): Promise<{ reference: string; ticketCode: string; duplicate: boolean }> {
+  const idempotencyKey = input.idempotencyKey?.trim() || randomUUID();
+  if (idempotencyKey.length < 8 || idempotencyKey.length > 128) {
+    throw new AppError("Missing transfer key.", 400, "invalid_key");
+  }
+  const already = await walletTicket(idempotencyKey);
+  if (already) return already;
+
+  try {
+    const created = await prisma.$transaction(async (tx) => {
+      const raced = await tx.payment.findUnique({
+        where: { externalRef: idempotencyKey },
+        include: { order: { include: { ticket: true, event: true, user: true } } },
+      });
+      if (raced?.order.ticket) {
+        return {
+          reference: raced.order.reference,
+          ticketCode: raced.order.ticket.code,
+          duplicate: true,
+          notify: null,
+        };
+      }
+      const event = await tx.event.findFirst({ where: { id: input.eventId, active: true } });
+      if (!event) throw new AppError("That event is not available.", 404, "event_not_found");
+      const totalRwf = event.priceRwf * input.quantity;
+      const { userId } = await debitBalance(tx, phoneE164, totalRwf);
+      const reserved = await tx.event.updateMany({
+        where: { id: event.id, ticketsSold: { lte: event.capacity - input.quantity } },
+        data: { ticketsSold: { increment: input.quantity } },
+      });
+      if (reserved.count === 0) throw new AppError("Not enough tickets left.", 409, "sold_out");
+
+      const reference = makeReference();
+      const order = await tx.order.create({
+        data: {
+          userId,
+          eventId: event.id,
+          quantity: input.quantity,
+          unitPriceRwf: event.priceRwf,
+          totalRwf,
+          currency: "RWF",
+          status: "PAID",
+          reference,
+        },
+      });
+      await tx.payment.create({
+        data: {
+          orderId: order.id,
+          provider: "wallet",
+          externalRef: idempotencyKey,
+          amount: String(totalRwf),
+          currency: "RWF",
+          status: "SUCCESSFUL",
+        },
+      });
+      const code = makeTicketCode();
+      const ticket = await tx.ticket.create({
+        data: {
+          orderId: order.id,
+          userId,
+          eventId: event.id,
+          code,
+          qrPayload: ticketPageUrl(code),
+          status: "ISSUED",
+        },
+      });
+      await recordTicketSpend(tx, {
+        userId,
+        phone: phoneE164,
+        amountRwf: totalRwf,
+        idempotencyKey,
+      });
+      await tx.auditLog.create({
+        data: {
+          action: "ticket.issued",
+          actor: maskPhone(phoneE164),
+          entity: "ticket",
+          entityId: ticket.id,
+          meta: safeJson({ code, reference, provider: "wallet" }),
+        },
+      });
+      return {
+        reference,
+        ticketCode: code,
+        duplicate: false,
+        notify: {
+          ticketId: ticket.id,
+          orderId: order.id,
+          phone: phoneE164,
+          eventName: event.shortName,
+          quantity: input.quantity,
+          reference,
+        },
+      };
+    });
+    if (created.notify) {
+      await getSmsService().send({
+        to: created.notify.phone,
+        body: ticketSms({
+          eventName: created.notify.eventName,
+          quantity: created.notify.quantity,
+          code: created.ticketCode,
+          reference: created.notify.reference,
+        }),
+        ticketId: created.notify.ticketId,
+        orderId: created.notify.orderId,
+      });
+    }
+    return {
+      reference: created.reference,
+      ticketCode: created.ticketCode,
+      duplicate: created.duplicate,
+    };
+  } catch (error) {
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+      const raced = await walletTicket(idempotencyKey);
+      if (raced) return raced;
+    }
+    throw error;
+  }
+}
+
+async function walletTicket(
+  idempotencyKey: string,
+): Promise<{ reference: string; ticketCode: string; duplicate: true } | null> {
+  const payment = await prisma.payment.findUnique({
+    where: { externalRef: idempotencyKey },
+    include: { order: { include: { ticket: true } } },
+  });
+  if (!payment?.order.ticket) return null;
+  return {
+    reference: payment.order.reference,
+    ticketCode: payment.order.ticket.code,
+    duplicate: true,
+  };
 }
 
 type TicketNotice = {
@@ -304,7 +447,7 @@ export function assertProviderName(value: string): ProviderName {
   throw new AppError("Unknown payment provider.", 400, "unknown_provider");
 }
 
-export function assertSimulationAllowed(provider: PaymentChoice): void {
+export function assertSimulationAllowed(provider: ProviderName): void {
   if (providerMode(provider) !== "mock") {
     throw new AppError("Simulation is only available in mock mode.", 403, "simulation_disabled");
   }

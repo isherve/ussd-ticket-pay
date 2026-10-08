@@ -1,6 +1,6 @@
 # USSD Ticket Pay
 
-A person dials `*384*123#`, picks an event, pays with MTN MoMo, Airtel Money, or PayPal, and gets a ticket code by SMS. This repository is a recruiter demo of that flow. It runs with **no API keys**. Sandboxes are opt-in through environment variables, and every one of them is a free tier.
+A person dials `*384*123#`, picks an event, and gets a ticket code. The part that is different is the wallet. Send, split, and paying for a ticket all move the same RWF balance inside this service. Each move is posted once. A cash-out to MTN or Airtel would be a later step. It runs with **no API keys**.
 
 ![USSD simulator](docs/screenshots/simulator.png)
 
@@ -10,12 +10,18 @@ The dashboard shot is a live local session. One payment is still waiting for app
 
 ## What you can show in five minutes
 
-1. Open the simulator and press **Play this purchase**. It buys 2 Jazz Night tickets with MTN.
-2. The session ends with `Check your phone to approve the payment. Ref: XXXXXXXX`.
-3. Open the dashboard. The payment is `PENDING`. Press **Succeed**.
-4. A ticket code, a QR image, and a console SMS appear. Press **Scan**. The pass opens above the orders. **Admit holder** marks it used once.
+Start with the wallet. That is the unique part.
 
-No handset, no wallet, and no credit card. You can also dial the keypad yourself. The phone posts the same form body Africa's Talking sends.
+1. Open **Wallet**. The page states the three moves: send, split, and pay for a ticket.
+2. Type a deposit (the field starts at 10,000 RWF; any whole amount from 1 to 1,000,000 works), send some to another Rwandan number, then split an amount. A split that does not divide evenly leaves the remainder in the sender's wallet. On USSD, **3. Wallet** then **3. Add money** asks for the amount.
+3. On the simulator, press **Pay with wallet**. The phone confirms `Via Wallet`, and the ticket code appears immediately. The dashboard row is already `SUCCESSFUL`. Press **Scan**. Pressing the same purchase again does not charge twice.
+
+Mobile money is the comparison, not the main act.
+
+4. Press **Play this purchase**. It buys 2 Jazz Night tickets with MTN and ends with `Check your phone to approve the payment`.
+5. On the dashboard the payment is `PENDING`. Press **Succeed**, then **Scan**, then **Admit holder**.
+
+No handset and no credit card. The phone posts the same form body Africa's Talking sends.
 
 Live site: https://ussd-ticket-pay.vercel.app
 
@@ -23,13 +29,14 @@ The Vercel deployment uses the same mock payments. Its dashboard header is `recr
 
 ## Where to read
 
-| Question                        | Start here                                                     |
-| ------------------------------- | -------------------------------------------------------------- |
-| How does a menu step work?      | `apps/api/src/ussd/engine.ts` and `apps/api/src/ussd/screens/` |
-| How is a ticket issued once?    | `settlePayment` in `apps/api/src/payments/service.ts`          |
-| What does each wallet send?     | `apps/api/src/payments/providers/` and `docs/providers.md`     |
-| Which numbers are accepted?     | `apps/api/src/lib/phone.ts`                                    |
-| What does the test suite cover? | `apps/api/tests/`                                              |
+| Question                              | Start here                                                     |
+| ------------------------------------- | -------------------------------------------------------------- |
+| How does a menu step work?            | `apps/api/src/ussd/engine.ts` and `apps/api/src/ussd/screens/` |
+| How is a ticket issued once?          | `settlePayment` in `apps/api/src/payments/service.ts`          |
+| How does a wallet transfer post once? | `apps/api/src/wallet/service.ts`                               |
+| What does each wallet send?           | `apps/api/src/payments/providers/` and `docs/providers.md`     |
+| Which numbers are accepted?           | `apps/api/src/lib/phone.ts`                                    |
+| What does the test suite cover?       | `apps/api/tests/`                                              |
 
 ## Architecture
 
@@ -63,7 +70,8 @@ stateDiagram-v2
   [*] --> Welcome
   Welcome --> Events: 1
   Welcome --> MyTickets: 2
-  Welcome --> Help: 3
+  Welcome --> Wallet: 3
+  Welcome --> Help: 4
   Welcome --> [*]: 0
   Events --> Quantity: event number
   Events --> Events: 98 next page
@@ -74,6 +82,7 @@ stateDiagram-v2
   Payment --> Quantity: 0
   Confirm --> [*]: 1 pay or 2 cancel
   MyTickets --> Welcome: 0
+  Wallet --> Welcome: 0
   Help --> Welcome: 0
 ```
 
@@ -271,7 +280,9 @@ Request and response shapes are written up in [docs/providers.md](docs/providers
 - **RWF on the screen, sandbox currency on the wire.** Orders store `totalRwf`. A sandbox charge is converted with `MOMO_RWF_PER_UNIT` or `PAYPAL_RWF_PER_UNIT`. Those rates are labeled as illustrative. They are not a treasury feed.
 - **SQLite, Postgres-shaped.** Statuses and JSON payloads are strings. There are no SQLite-only column types, so the same Prisma models can move to PostgreSQL by changing the datasource and generating a new migration.
 - **Idempotent tickets.** `Payment.externalRef` and `Ticket.orderId` are unique. A status change from `PENDING` uses `updateMany` with `status: PENDING`, so two webhook deliveries cannot both win. A `WebhookReceipt` row ignores an identical delivery id.
-- **Suggest the wallet, do not block it.** `078/079` suggests MTN and `072/073` suggests Airtel. The payer can still pick the other method or PayPal. A mismatch is printed on the confirm screen.
+- **Suggest the network, do not block it.** `078/079` suggests MTN and `072/073` suggests Airtel. The payer can still pick the other method or PayPal. A mismatch is printed on the confirm screen.
+- **Wallet balances stay inside the ledger.** A send or a split debits and credits in one database transaction. The same idempotency key cannot post twice. An equal split keeps any leftover RWF with the sender.
+- **A wallet ticket is one transaction.** Choosing Wallet on the payment screen debits the balance, reserves the seats, and inserts the ticket together. There is no pending payment and no webhook. The USSD session id plus the dialed text is the idempotency key, so a retried confirm returns the same code.
 - **In-process cron.** `node-cron` polls stale `PENDING` payments and sends a ticket SMS if the process died between the insert and the send. There is no Redis and no hosted queue.
 
 ## Security
@@ -287,7 +298,7 @@ Request and response shapes are written up in [docs/providers.md](docs/providers
 - Move jobs to a durable queue with backoff, a dead-letter path, and more than one API instance. SQLite and in-process cron are demo constraints.
 - Run PostgreSQL, add OpenTelemetry, and alert on payments stuck in `PENDING`.
 - Keep card handling inside PayPal so this system stays out of PCI cardholder scope. Mobile-money PIN entry stays on the handset.
-- Register a real short code with a Rwandan aggregator, sign the telco agreements, and complete KYC with MTN and Airtel before any live wallet is debited. Sandbox EUR and test MSISDNs do not transfer to production RWF.
+- Register a real short code with a Rwandan aggregator, sign the telco agreements, and complete KYC with MTN and Airtel before any live wallet is debited. Sandbox EUR and test MSISDNs do not transfer to production RWF. A production wallet would deposit through those providers, then allow transfers between numbers on this service.
 - Register an SMS sender ID, store consent, and rate-limit outbound SMS per MSISDN.
 - Replace the admin header with real operator login, and verify Airtel's country-specific callback hash instead of a header the gateway does not send.
 

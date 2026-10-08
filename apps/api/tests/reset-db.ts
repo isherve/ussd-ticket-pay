@@ -7,6 +7,9 @@ afterAll(async () => {
 });
 
 export async function resetDb(): Promise<void> {
+  await prisma.transferLine.deleteMany();
+  await prisma.transfer.deleteMany();
+  await prisma.wallet.deleteMany();
   await prisma.webhookReceipt.deleteMany();
   await prisma.smsLog.deleteMany();
   await prisma.auditLog.deleteMany();

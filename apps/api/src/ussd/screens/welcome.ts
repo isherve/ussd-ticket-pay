@@ -1,7 +1,14 @@
 import { assertUssdLength } from "../../lib/ussdLimit.js";
 import type { ScreenContext, ScreenStep, UssdScreen } from "../types.js";
 
-const MENU = ["USSD Ticket Pay", "1. Buy ticket", "2. My tickets", "3. Help", "0. Exit"].join("\n");
+const MENU = [
+  "USSD Ticket Pay",
+  "1. Buy ticket",
+  "2. My tickets",
+  "3. Wallet",
+  "4. Help",
+  "0. Exit",
+].join("\n");
 
 export const welcomeScreen: UssdScreen = {
   id: "welcome",
@@ -15,6 +22,8 @@ export const welcomeScreen: UssdScreen = {
       case "2":
         return Promise.resolve({ type: "goto", screen: "tickets" });
       case "3":
+        return Promise.resolve({ type: "goto", screen: "wallet", data: { eventPage: 0 } });
+      case "4":
         return Promise.resolve({ type: "goto", screen: "help" });
       case "0":
         return Promise.resolve({ type: "end", message: "Goodbye. Dial again anytime." });

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
-import { postUssd, type Meta } from "../api";
+import { postUssd, topUpWallet, type Meta } from "../api";
 
 const keys = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "*", "0", "#"] as const;
 
@@ -9,6 +9,14 @@ const purchase = [
   { key: "1", label: "Jazz Night" },
   { key: "2", label: "Two tickets" },
   { key: "1", label: "MTN MoMo" },
+  { key: "1", label: "Confirm" },
+] as const;
+
+const walletPurchase = [
+  { key: "1", label: "Buy ticket" },
+  { key: "1", label: "Jazz Night" },
+  { key: "1", label: "One ticket" },
+  { key: "4", label: "Wallet" },
   { key: "1", label: "Confirm" },
 ] as const;
 
@@ -30,7 +38,9 @@ export function SimulatorPage({ meta }: { meta: Meta | null }) {
   const [error, setError] = useState("");
   const [playing, setPlaying] = useState(false);
   const [cue, setCue] = useState<number | null>(null);
+  const [steps, setSteps] = useState<readonly { key: string; label: string }[]>(purchase);
   const [reference, setReference] = useState("");
+  const [issuedCode, setIssuedCode] = useState("");
   const playingRef = useRef(false);
 
   useEffect(() => {
@@ -76,11 +86,13 @@ export function SimulatorPage({ meta }: { meta: Meta | null }) {
     }
   }
 
-  async function playPurchase() {
+  async function play(script: readonly { key: string; label: string }[], fundWallet: boolean) {
     if (playingRef.current || busy) return;
     playingRef.current = true;
     setPlaying(true);
+    setSteps(script);
     setReference("");
+    setIssuedCode("");
     setError("");
     const id = `web-${Date.now().toString(36)}`;
     setSessionId(id);
@@ -91,11 +103,19 @@ export function SimulatorPage({ meta }: { meta: Meta | null }) {
     setDeadline(null);
     setCue(null);
     try {
+      if (fundWallet) {
+        try {
+          await topUpWallet(phone);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : "";
+          if (!message.includes("100000")) throw err;
+        }
+      }
       const opened = await send("", id);
       if (!opened) return;
       let text = "";
-      for (let index = 0; index < purchase.length; index += 1) {
-        const choice = purchase[index]?.key;
+      for (let index = 0; index < script.length; index += 1) {
+        const choice = script[index]?.key;
         if (!choice) break;
         setCue(index);
         setDraft(choice);
@@ -106,8 +126,12 @@ export function SimulatorPage({ meta }: { meta: Meta | null }) {
         if (!body) return;
         const match = /Ref:\s*([A-Z0-9]+)/.exec(body);
         if (match?.[1]) setReference(match[1]);
+        const code = /Code\s+([A-Z0-9]+)/.exec(body);
+        if (code?.[1]) setIssuedCode(code[1]);
         await delay(550);
       }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Request failed");
     } finally {
       playingRef.current = false;
       setCue(null);
@@ -199,7 +223,7 @@ export function SimulatorPage({ meta }: { meta: Meta | null }) {
           Send. A session expires after {ttl} seconds of silence.
         </p>
         <ol className="mt-5 space-y-2">
-          {purchase.map((step, index) => (
+          {steps.map((step, index) => (
             <li
               key={step.label}
               className={`flex items-center gap-3 rounded-xl px-3 py-2 text-sm ${cue === index ? "bg-[var(--color-moss)]" : "bg-white/70"}`}
@@ -212,14 +236,34 @@ export function SimulatorPage({ meta }: { meta: Meta | null }) {
         <div className="mt-4 flex flex-wrap gap-2">
           <button
             type="button"
-            onClick={() => void playPurchase()}
+            onClick={() => void play(purchase, false)}
             disabled={busy || playing}
             className="rounded-full bg-[var(--color-ink)] px-5 py-2 text-sm text-[var(--color-paper)] disabled:opacity-40"
           >
             {playing ? "Playing…" : "Play this purchase"}
           </button>
+          <button
+            type="button"
+            onClick={() => void play(walletPurchase, true)}
+            disabled={busy || playing}
+            className="rounded-full bg-[var(--color-forest)] px-5 py-2 text-sm text-white disabled:opacity-40"
+          >
+            Pay with wallet
+          </button>
         </div>
-        {reference ? (
+        <p className="mt-3 text-sm leading-6 text-[#4d574f]">
+          Pay with wallet adds 10,000 RWF if there is room, then buys one Jazz Night ticket from
+          that balance. The ticket is issued immediately. Pressing it again does not charge twice.
+        </p>
+        {issuedCode ? (
+          <p className="mt-4 rounded-xl bg-[var(--color-moss)] px-3 py-2 text-sm leading-6">
+            Ticket <span className="font-mono">{issuedCode}</span> is paid from the wallet.{" "}
+            <Link to="/admin" className="underline">
+              Open the dashboard
+            </Link>{" "}
+            and press Scan. There is no approval step.
+          </p>
+        ) : reference ? (
           <p className="mt-4 rounded-xl bg-[var(--color-moss)] px-3 py-2 text-sm leading-6">
             Payment <span className="font-mono">{reference}</span> is waiting.{" "}
             <Link to="/admin" className="underline">

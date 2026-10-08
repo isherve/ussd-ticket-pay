@@ -11,13 +11,16 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  phone     String   @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  orders    Order[]
-  tickets   Ticket[]
+  id            String         @id @default(cuid())
+  phone         String         @unique
+  name          String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  orders        Order[]
+  tickets       Ticket[]
+  wallet        Wallet?
+  transfersFrom Transfer[]     @relation("TransferFrom")
+  transferLines TransferLine[]
 }
 
 model Event {
@@ -129,6 +132,47 @@ model SmsLog {
 
   @@index([createdAt])
   @@index([ticketId])
+}
+
+model Wallet {
+  id         String   @id @default(cuid())
+  userId     String   @unique
+  currency   String   @default("RWF")
+  balanceRwf Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  user       User     @relation(fields: [userId], references: [id])
+}
+
+model Transfer {
+  id             String         @id @default(cuid())
+  reference      String         @unique
+  idempotencyKey String         @unique
+  kind           String
+  fromUserId     String?
+  totalRwf       Int
+  shareRwf       Int?
+  remainderRwf   Int            @default(0)
+  status         String
+  createdAt      DateTime       @default(now())
+  fromUser       User?          @relation("TransferFrom", fields: [fromUserId], references: [id])
+  lines          TransferLine[]
+
+  @@index([fromUserId, createdAt])
+}
+
+model TransferLine {
+  id         String   @id @default(cuid())
+  transferId String
+  userId     String
+  direction  String
+  amountRwf  Int
+  createdAt  DateTime @default(now())
+  transfer   Transfer @relation(fields: [transferId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([transferId])
 }
 
 model WebhookReceipt {
