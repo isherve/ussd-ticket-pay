@@ -174,18 +174,15 @@ describe("internal wallet", () => {
 
   it("opens the demo number with recent transfers and does not post them twice", async () => {
     await ensureDemoWallet();
-    expect(await balance(from)).toBe(2500);
+    expect(await balance(from)).toBe(4500);
     const view = await request(app).get("/api/wallet").query({ phone: from });
-    expect(view.body.transfers).toHaveLength(3);
-    expect(view.body.transfers.map((entry: { kind: string }) => entry.kind).sort()).toEqual([
-      "SEND",
-      "SPLIT",
-      "TOPUP",
-    ]);
+    const kinds = view.body.transfers.map((entry: { kind: string }) => entry.kind);
+    expect(kinds).toEqual(["TICKET", "SPLIT", "SEND", "TOPUP", "TICKET", "TOPUP"]);
+    expect(JSON.stringify(view.body.transfers)).toContain("***9111");
 
     await ensureDemoWallet();
-    expect(await balance(from)).toBe(2500);
-    expect(await prisma.transfer.count()).toBe(3);
+    expect(await balance(from)).toBe(4500);
+    expect(await prisma.transfer.count()).toBe(6);
   });
 
   it("credits the amount typed on deposit", async () => {

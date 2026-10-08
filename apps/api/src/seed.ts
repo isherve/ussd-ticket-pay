@@ -1,4 +1,5 @@
 import type { Event } from "@prisma/client";
+import { startCheckout } from "./payments/service.js";
 import { prisma } from "./db.js";
 import { sendToWallet, splitWallet, topUp } from "./wallet/service.js";
 
@@ -73,8 +74,31 @@ export async function ensureSeed(): Promise<Event[]> {
 
 const demoPhone = "+250788123456";
 
+async function demoTicket(eventId: string, idempotencyKey: string): Promise<void> {
+  await startCheckout({
+    phone: demoPhone,
+    eventId,
+    quantity: 1,
+    provider: "wallet",
+    idempotencyKey,
+  });
+}
+
 export async function ensureDemoWallet(): Promise<void> {
-  await topUp({ phone: demoPhone, amountRwf: 10_000, idempotencyKey: "seed-deposit-1" });
+  const already = await prisma.transfer.findUnique({ where: { idempotencyKey: "seed-deposit-1" } });
+  if (already) return;
+  const owner = await prisma.user.findUnique({
+    where: { phone: demoPhone },
+    include: { wallet: true },
+  });
+  if ((owner?.wallet?.balanceRwf ?? 0) > 0) return;
+
+  const event = await prisma.event.findUnique({ where: { slug: "jazz-night" } });
+  if (!event) return;
+
+  await topUp({ phone: demoPhone, amountRwf: 15_000, idempotencyKey: "seed-deposit-1" });
+  await demoTicket(event.id, "seed-ticket-1");
+  await topUp({ phone: demoPhone, amountRwf: 7_000, idempotencyKey: "seed-deposit-2" });
   await sendToWallet({
     fromPhone: demoPhone,
     toPhone: "+250788999111",
@@ -87,4 +111,5 @@ export async function ensureDemoWallet(): Promise<void> {
     phones: ["+250728999222", "+250728999333"],
     idempotencyKey: "seed-split-1",
   });
+  await demoTicket(event.id, "seed-ticket-2");
 }
